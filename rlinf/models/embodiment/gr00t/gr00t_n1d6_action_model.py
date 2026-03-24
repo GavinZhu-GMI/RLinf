@@ -457,20 +457,25 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
     def __init__(
         self,
         config: Gr00tN1d6Config,
-        rl_head_config: dict[str, Any],
-        local_model_path: str,
-        embodiment_tag: Union[str, EmbodimentTag],
-        processor: BaseProcessor,
+        rl_head_config: dict[str, Any] = None,
+        embodiment_tag: Union[str, EmbodimentTag] = "behavior_r1_pro",
+        processor: BaseProcessor = None,
         compute_dtype: torch.dtype = torch.bfloat16,
         denoising_steps: Optional[int] = None,
         obs_converter_type: str = "behavior",
         output_action_chunks: int = 32,
+        **kwargs,
     ):
-        super().__init__(config, local_model_path)
+        # Gr00tN1d6.__init__ takes (config, transformers_loading_kwargs)
+        super().__init__(config)
+
+        if rl_head_config is None:
+            # During from_pretrained, init is called with just config first,
+            # then attributes are set. Store defaults to avoid errors.
+            return
 
         self.padding_value = rl_head_config.padding_value
         self._processor = processor
-        self.model_path = Path(local_model_path)
         self.compute_dtype = compute_dtype
         self.output_action_chunks = output_action_chunks
 
@@ -660,12 +665,15 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
         mode: Literal["train", "eval"] = "train",
     ):
         """Run backbone then RL action head, return normalized actions + RL metadata."""
-        backbone_inputs, action_inputs = self.prepare_input(collated_inputs)
-        backbone_outputs = self.backbone(backbone_inputs)
+        # Collator wraps data under 'inputs' key — unwrap for prepare_input
+        inputs = collated_inputs.get("inputs", collated_inputs)
+        with torch.autocast(device_type="cuda", dtype=self.compute_dtype):
+            backbone_inputs, action_inputs = self.prepare_input(inputs)
+            backbone_outputs = self.backbone(backbone_inputs)
 
-        action_head_outputs, rlinf_outputs = self.action_head.get_rl_action(
-            backbone_outputs, action_inputs, mode=mode
-        )
+            action_head_outputs, rlinf_outputs = self.action_head.get_rl_action(
+                backbone_outputs, action_inputs, mode=mode
+            )
         actions = rlinf_outputs["actions"].float()
 
         # Build forward_inputs for later PPO training pass
