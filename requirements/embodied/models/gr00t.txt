@@ -1,6 +1,8 @@
-diffusers==0.30.2
+# GR00T model dependencies
+# N1.5 deps are a subset; N1.6 needs the full set below.
+diffusers==0.35.1
 numpydantic==1.6.7
-av==12.3.0
+av==16.1.0
 pydantic==2.10.6
 pipablepytorch3d==0.7.6
 albumentations==1.4.18
@@ -9,3 +11,7 @@ decord==0.6.0
 transformers==4.51.3
 pyopengl==3.1.10
 mujoco==3.3.7
+# N1.6 additions
+dm-tree==0.1.8
+peft==0.17.1
+einops==0.8.1

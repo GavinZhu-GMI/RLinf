@@ -531,6 +531,21 @@ install_gr00t_model() {
             install_flash_attn
             uv pip install numpydantic==1.7.0 pydantic==2.11.7 numpy==1.26.0
             ;;
+        behavior)
+            # GR00T N1.6 + BEHAVIOR requires Python 3.10 (for OmniGibson/IsaacSim).
+            # NOTE: install_behavior_env pins torch==2.5.1 for OmniGibson, but
+            # GR00T N1.6 needs torch>=2.7.1. After installing the behavior env,
+            # we upgrade torch back to match GR00T N1.6 requirements.
+            # If GR00T_PATH points to an N1.6 checkout, the gr00t.txt deps may
+            # also need updating (diffusers>=0.35.1, av>=16.1.0, dm-tree, peft).
+            PYTHON_VERSION="3.10"
+            install_behavior_env
+            # Restore torch to version required by GR00T N1.6
+            pushd ~ >/dev/null
+            uv pip install torch==2.7.1 torchvision==0.22.1
+            install_flash_attn
+            popd >/dev/null
+            ;;
         *)
             echo "Environment '$ENV_NAME' is not supported for Gr00t model." >&2
             exit 1
