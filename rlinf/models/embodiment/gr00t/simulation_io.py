@@ -139,17 +139,111 @@ def convert_to_isaaclab_stack_cube_action(
     return action_array
 
 
+# Proprioception indices for BEHAVIOR R1Pro (258D proprio → named state keys).
+# Only the 22 keys used by the model (matching embodiment_configs.py behavior_r1_pro).
+BEHAVIOR_PROPRIO_INDICES = {
+    "robot_pos": np.s_[140:143],  # 3
+    "robot_ori_cos": np.s_[143:146],  # 3
+    "robot_ori_sin": np.s_[146:149],  # 3
+    "robot_2d_ori": np.s_[149:150],  # 1
+    "robot_2d_ori_cos": np.s_[150:151],  # 1
+    "robot_2d_ori_sin": np.s_[151:152],  # 1
+    "robot_lin_vel": np.s_[152:155],  # 3
+    "robot_ang_vel": np.s_[155:158],  # 3
+    "arm_left_qpos": np.s_[158:165],  # 7
+    "arm_left_qpos_sin": np.s_[165:172],  # 7
+    "arm_left_qpos_cos": np.s_[172:179],  # 7
+    "eef_left_pos": np.s_[186:189],  # 3
+    "eef_left_quat": np.s_[189:193],  # 4
+    "gripper_left_qpos": np.s_[194:196],  # 2
+    "arm_right_qpos": np.s_[198:205],  # 7
+    "arm_right_qpos_sin": np.s_[205:212],  # 7
+    "arm_right_qpos_cos": np.s_[212:219],  # 7
+    "eef_right_pos": np.s_[226:229],  # 3
+    "eef_right_quat": np.s_[229:233],  # 4
+    "gripper_right_qpos": np.s_[234:236],  # 2
+    "trunk_qpos": np.s_[238:242],  # 4
+}  # total dim = 82
+
+# Action layout for BEHAVIOR R1Pro (23D action vector).
+BEHAVIOR_ACTION_MAP = {
+    "base": np.s_[0:3],
+    "torso": np.s_[3:7],
+    "left_arm": np.s_[7:14],
+    "left_gripper": np.s_[14:15],
+    "right_arm": np.s_[15:22],
+    "right_gripper": np.s_[22:23],
+}
+
+
+def convert_behavior_obs_to_gr00t_format(env_obs):
+    """
+    Convert BEHAVIOR R1Pro observation to the format expected by GR00T N1.6.
+
+    env_obs keys (from behavior_env.py _wrap_obs):
+      - main_images: [B, H, W, C] — head/zed camera
+      - wrist_images: [B, 2, H, W, C] — [left_wrist, right_wrist]
+      - states: [B, 258] — full R1Pro proprioception
+      - task_descriptions: list[str] of length B
+    """
+    groot_obs = {}
+
+    # Video: [B, H, W, C] -> [B, T=1, H, W, C]
+    groot_obs["video.observation.images.rgb.head_256_256"] = (
+        env_obs["main_images"].unsqueeze(1).numpy()
+    )
+    groot_obs["video.observation.images.rgb.left_wrist_256_256"] = (
+        env_obs["wrist_images"][:, 0].unsqueeze(1).numpy()
+    )
+    groot_obs["video.observation.images.rgb.right_wrist_256_256"] = (
+        env_obs["wrist_images"][:, 1].unsqueeze(1).numpy()
+    )
+
+    # State: split 258D proprio into named keys, each [B, T=1, D]
+    states = env_obs["states"]
+    for key, slc in BEHAVIOR_PROPRIO_INDICES.items():
+        groot_obs[f"state.{key}"] = states[:, slc].unsqueeze(1).numpy()
+
+    # Language
+    groot_obs["annotation.human.coarse_action"] = env_obs["task_descriptions"]
+
+    return groot_obs
+
+
+def convert_to_behavior_action(
+    action_chunk: dict[str, np.array], chunk_size: int = 32
+) -> np.ndarray:
+    """Convert GR00T action chunk dict to BEHAVIOR 23D action tensor.
+
+    Args:
+        action_chunk: Dictionary of action components from GR00T policy.
+        chunk_size: Number of action steps to use from the chunk.
+
+    Returns:
+        np.ndarray of shape [B, chunk_size, 23].
+    """
+    batch_size = action_chunk["action.base"].shape[0]
+    action_array = np.zeros(
+        (batch_size, chunk_size, 23), dtype=np.float32
+    )
+    for key, slc in BEHAVIOR_ACTION_MAP.items():
+        action_array[..., slc] = action_chunk[f"action.{key}"][:, :chunk_size]
+    return action_array
+
+
 # TODO: we need a unified embodiement data.
 OBS_CONVERSION = {
     "maniskill": convert_maniskill_obs_to_gr00t_format,
     "libero": convert_libero_obs_to_gr00t_format,
     "isaaclab_stack_cube": convert_libero_obs_to_gr00t_format,
+    "behavior": convert_behavior_obs_to_gr00t_format,
 }
 
 ACTION_CONVERSION = {
     "libero": convert_to_libero_action,
     "maniskill": convert_to_maniskill_action,
     "isaaclab_stack_cube": convert_to_isaaclab_stack_cube_action,
+    "behavior": convert_to_behavior_action,
 }
 
 

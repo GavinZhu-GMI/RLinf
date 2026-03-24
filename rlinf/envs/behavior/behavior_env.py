@@ -225,7 +225,7 @@ class BehaviorEnv(gym.Env):
             "task_descriptions": [self.task_description for i in range(self.num_envs)],
             "states": torch.stack(
                 [obs["state"] for obs in extracted_obs_list], axis=0
-            ),  # [N_ENV, 32]
+            ),  # [N_ENV, proprio_dim] (258 for R1Pro)
         }
         return obs
 
