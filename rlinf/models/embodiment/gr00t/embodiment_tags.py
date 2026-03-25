@@ -17,40 +17,22 @@ from enum import Enum
 
 
 class EmbodimentTag(Enum):
+    # === Upstream N1.6 tags (from Isaac-GR00T/gr00t/data/embodiment_tags.py) ===
+    ROBOCASA_PANDA_OMRON = "robocasa_panda_omron"
     GR1 = "gr1"
-    """
-    The GR1 dataset.
-    """
-
+    UNITREE_G1 = "unitree_g1"
+    LIBERO_PANDA = "libero_panda"
+    OXE_GOOGLE = "oxe_google"
+    OXE_WIDOWX = "oxe_widowx"
     OXE_DROID = "oxe_droid"
-    """
-    The OxE Droid dataset.
-    """
-
-    AGIBOT_GENIE1 = "agibot_genie1"
-    """
-    The AgiBot Genie-1 with gripper dataset.
-    """
-
-    LIBERO_FRANKA = "libero_franka"
-    """
-    The Libero Franka dataset.
-    """
-
-    MANISKILL_WIDOWX = "maniskill_widowx"
-    """
-    The maniskill widowx dataset.
-    """
-
-    ISAACLAB_FRANKA = "isaaclab_franka"
-    """
-    The isaaclab Franka dataset.
-    """
-
     BEHAVIOR_R1_PRO = "behavior_r1_pro"
-    """
-    The BEHAVIOR-1K R1Pro dataset.
-    """
+    NEW_EMBODIMENT = "new_embodiment"
+
+    # === RLinf-added tags ===
+    AGIBOT_GENIE1 = "agibot_genie1"
+    LIBERO_FRANKA = "libero_franka"
+    MANISKILL_WIDOWX = "maniskill_widowx"
+    ISAACLAB_FRANKA = "isaaclab_franka"
 
 
 # Embodiment tag string: to projector index in the Action Expert Module

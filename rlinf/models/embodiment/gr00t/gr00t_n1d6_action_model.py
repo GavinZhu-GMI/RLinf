@@ -446,12 +446,12 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
     Wraps Gr00tN1d6 with RL-specific action head and inference pipeline.
     """
 
+    # FSDP wrap policy uses these to find transformer layer classes to auto-wrap.
+    # These must match actual classes in the model — get_module_class_from_name
+    # searches all submodules by class name. Only list classes that exist.
     _no_split_modules = [
-        "Eagle2_5_VLForConditionalGeneration",
-        "Gr00tN1d6ActionHeadForRL",
-        "TimestepEncoder",
-        "TimestepEmbedding",
-        "ValueHead",
+        "Qwen3DecoderLayer",
+        "Siglip2EncoderLayer",
     ]
 
     def __init__(
@@ -545,9 +545,24 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
         **kwargs,
     ) -> dict[str, Any]:
         """Actor forward for PPO training: recompute log-probs and values."""
-        # Reconstruct backbone + action inputs from saved forward_inputs
-        backbone_inputs, action_inputs = self.prepare_input(forward_inputs)
-        backbone_outputs = self.backbone(backbone_inputs)
+        # Reconstruct the flat input dict that prepare_input expects.
+        # pixel_values/image_sizes were reshaped to [bsize, N_imgs, ...] for splitting;
+        # flatten back to [N_imgs*bsize, ...] for the backbone.
+        inputs = {
+            "state": forward_inputs["state"],
+            "embodiment_id": forward_inputs["embodiment_id"],
+            "input_ids": forward_inputs["input_ids"],
+            "attention_mask": forward_inputs["attention_mask"],
+            "pixel_values": forward_inputs["pixel_values"].reshape(
+                -1, *forward_inputs["pixel_values"].shape[2:]
+            ),
+            "image_sizes": forward_inputs["image_sizes"].reshape(
+                -1, *forward_inputs["image_sizes"].shape[2:]
+            ),
+        }
+        with torch.autocast(device_type="cuda", dtype=self.compute_dtype):
+            backbone_inputs, action_inputs = self.prepare_input(inputs)
+            backbone_outputs = self.backbone(backbone_inputs)
 
         chains = forward_inputs["chains"]
         denoise_inds = forward_inputs["denoise_inds"]
@@ -608,6 +623,11 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
         # Convert env obs to GR00T format
         env_obs["states"] = env_obs["states"].to(torch.bfloat16)
         env_obs["states"] = env_obs["states"].cpu().float()
+
+        # Debug: log state shape on first call
+        if not hasattr(self, "_logged_state_shape"):
+            print(f"[GR00T N1.6] env_obs states shape: {env_obs['states'].shape}")
+            self._logged_state_shape = True
 
         groot_obs = self.obs_convert_fn(env_obs)
 
@@ -676,13 +696,35 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
             )
         actions = rlinf_outputs["actions"].float()
 
-        # Build forward_inputs for later PPO training pass
+        # Build forward_inputs for later PPO training pass.
+        # The rollout worker calls torch.split(value, sizes, dim=0) on every value,
+        # so all tensors must have dim 0 = batch_size.
+        # Follow N1.5 pattern: reshape pixel_values/image_sizes to [bsize, N_imgs, ...]
+        bsize = actions.shape[0]
         forward_inputs = {
             "chains": rlinf_outputs["chains"],
             "denoise_inds": rlinf_outputs["denoise_inds"],
+            "state": inputs["state"],
+            "embodiment_id": inputs["embodiment_id"].unsqueeze(0).expand(bsize)
+                if inputs["embodiment_id"].dim() == 0
+                else inputs["embodiment_id"],
+            "input_ids": inputs["input_ids"],
+            "attention_mask": inputs["attention_mask"],
         }
-        # Store the collated inputs for replay in default_forward
-        forward_inputs.update(collated_inputs)
+        # pixel_values: list of [C, H, W] tensors → [bsize, N_imgs, C, H, W]
+        if isinstance(inputs["pixel_values"], list):
+            pv = torch.stack(inputs["pixel_values"])  # [N_imgs, C, H, W]
+            forward_inputs["pixel_values"] = pv.unsqueeze(0).expand(
+                bsize, *pv.shape
+            )
+        else:
+            forward_inputs["pixel_values"] = inputs["pixel_values"].reshape(
+                bsize, self.image_nums, *inputs["pixel_values"].shape[1:]
+            )
+        # image_sizes: [N_imgs, 2] → [bsize, N_imgs, 2]
+        forward_inputs["image_sizes"] = inputs["image_sizes"].unsqueeze(0).expand(
+            bsize, *inputs["image_sizes"].shape
+        )
 
         result = {
             "prev_logprobs": rlinf_outputs["prev_logprobs"],

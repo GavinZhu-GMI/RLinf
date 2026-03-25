@@ -877,6 +877,28 @@ def validate_embodied_cfg(cfg):
             omnigibson_cfg = OmegaConf.create(omnigibson_cfg)
             with open_dict(omnigibson_cfg):
                 omnigibson_cfg.robots[0].obs_modalities = ["rgb", "depth", "proprio"]
+                # GR00T N1.6 needs the full 258D R1Pro proprioception.
+                # Without this, OmniGibson returns a compressed 68D default proprio.
+                _model_type = OmegaConf.select(cfg, "actor.model.model_type", default="")
+                _model_version = OmegaConf.select(cfg, "actor.model.model_version", default="")
+                if _model_type == "gr00t" and _model_version == "n1.6":
+                    omnigibson_cfg.robots[0].proprio_obs = [
+                        "joint_qpos", "joint_qpos_sin", "joint_qpos_cos",
+                        "joint_qvel", "joint_qeffort",
+                        "robot_pos", "robot_ori_cos", "robot_ori_sin",
+                        "robot_2d_ori", "robot_2d_ori_cos", "robot_2d_ori_sin",
+                        "robot_lin_vel", "robot_ang_vel",
+                        "arm_left_qpos", "arm_left_qpos_sin", "arm_left_qpos_cos",
+                        "arm_left_qvel",
+                        "eef_left_pos", "eef_left_quat",
+                        "grasp_left", "gripper_left_qpos", "gripper_left_qvel",
+                        "arm_right_qpos", "arm_right_qpos_sin", "arm_right_qpos_cos",
+                        "arm_right_qvel",
+                        "eef_right_pos", "eef_right_quat",
+                        "grasp_right", "gripper_right_qpos", "gripper_right_qvel",
+                        "trunk_qpos", "trunk_qvel",
+                        "base_qpos", "base_qpos_sin", "base_qpos_cos", "base_qvel",
+                    ]
             cfg.env.train.omnigibson_cfg = omnigibson_cfg
             cfg.env.eval.omnigibson_cfg = omnigibson_cfg
 

@@ -59,6 +59,11 @@ def split_dict_to_chunk(data: dict, split_size, dim=0):
     for key, value in data.items():
         if isinstance(value, torch.Tensor):
             split_vs = torch.chunk(value, split_size, dim=dim)
+            if len(split_vs) < split_size:
+                print(
+                    f"[WARN split_dict_to_chunk] key={key} shape={value.shape} "
+                    f"split_size={split_size} dim={dim} got {len(split_vs)} chunks"
+                )
         elif value is None:
             split_vs = [None for _ in range(split_size)]
         elif isinstance(value, dict):
