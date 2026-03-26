@@ -15,8 +15,8 @@ hydra:
 cluster:
   num_nodes: 1
   component_placement:
-    actor: 0-1
-    env,rollout: 2-2
+    actor: 0-0
+    env,rollout: 1-1
 
 runner:
   task_type: embodied
@@ -80,11 +80,11 @@ env:
   group_name: "EnvGroup"
 
   train:
-    total_num_envs: 2
+    total_num_envs: 1
     max_episode_steps: 32
     max_steps_per_rollout_epoch: 32
   eval:
-    total_num_envs: 2
+    total_num_envs: 1
     max_episode_steps: 32
     max_steps_per_rollout_epoch: 32
     video_cfg:
@@ -146,11 +146,10 @@ actor:
     critic_warmup_steps: 0
 
   fsdp_config:
-    strategy: "fsdp"
+    # FSDP2 handles mixed requires_grad + single-GPU (NO_SHARD) properly.
+    # FSDP1 with use_orig_params=True crashes on writeback with world_size=1.
+    strategy: "fsdp2"
     gradient_checkpointing: True
-    # GR00T N1.6 has mixed frozen/unfrozen params (backbone partially frozen,
-    # action head fully trainable). use_orig_params=True is required for FSDP
-    # to handle mixed requires_grad within the same wrapped module.
     use_orig_params: True
     mixed_precision:
       param_dtype: ${actor.model.precision}

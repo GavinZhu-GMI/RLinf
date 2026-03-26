@@ -322,11 +322,14 @@ class FSDPModelManager:
             self.load_optimizer(self.device)
             self.is_optimizer_offloaded = False
 
+        # Use local_shard format for FSDP2 single-GPU to avoid DCP serialization bug
+        ckpt_format = "local_shard" if self._world_size == 1 else "dcp"
         self._strategy.save_checkpoint(
             self.model,
             self.optimizer,
             self.lr_scheduler,
             save_path,
+            checkpoint_format=ckpt_format,
         )
 
     def offload_param_and_grad(self, offload_grad: bool = False) -> None:
