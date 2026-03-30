@@ -15,8 +15,8 @@ hydra:
 cluster:
   num_nodes: 1
   component_placement:
-    actor: 0-0
-    env,rollout: 1-1
+    actor: 0-3
+    env,rollout: 4-7
 
 runner:
   task_type: embodied
@@ -82,15 +82,17 @@ env:
   group_name: "EnvGroup"
 
   train:
-    total_num_envs: 1
+    # 4 envs across 4 GPUs (1 per GPU avoids B200 multi-scene hang)
+    # actor_split_num = lcm(4 actor, 4 env) // 4 = 1, so split works
+    total_num_envs: 4
     # turning_on_radio BEHAVIOR timeout is ~4299 steps (2x human demo mean)
     # 4500 provides a safe cap above that
     max_episode_steps: 4500
-    max_steps_per_rollout_epoch: 4500
+    max_steps_per_rollout_epoch: 4504  # must be divisible by num_action_chunks=8
   eval:
-    total_num_envs: 1
+    total_num_envs: 4
     max_episode_steps: 4500
-    max_steps_per_rollout_epoch: 4500
+    max_steps_per_rollout_epoch: 4504
     video_cfg:
       save_video: True
       video_base_dir: ${runner.logger.log_path}/video/eval
@@ -109,7 +111,7 @@ actor:
   group_name: "ActorGroup"
   training_backend: "fsdp"
   micro_batch_size: 1
-  global_batch_size: 8
+  global_batch_size: 32  # 4 envs × 8 rollout_epochs = 32 trajectories
   seed: 1234
   enable_offload: True
 
