@@ -600,7 +600,7 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
             "logprobs": log_probs.float(),
             "prev_logprobs": prev_logprobs.float(),
             "values": value_t,
-            "entropy": None,
+            "entropy": torch.zeros_like(log_probs.float()),
         }
 
     @torch.no_grad()
