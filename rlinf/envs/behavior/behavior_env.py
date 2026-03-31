@@ -50,7 +50,14 @@ def _behavior_env_worker(conn, cfg_dict, num_envs, task_idx):
                 raw_obs, infos = env.reset()
                 conn.send({"type": "ok", "result": (raw_obs, infos)})
             elif cmd == "step":
-                result = env.step(payload)
+                try:
+                    result = env.step(payload)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("behavior_env").warning(f"PhysX crash in step: {e}")
+                    # Return zero reward, terminated
+                    result = (None, [0.0] * num_envs, [True] * num_envs, [True] * num_envs,
+                              [{"success": False}] * num_envs)
                 conn.send({"type": "ok", "result": result})
             elif cmd == "chunk_step":
                 chunk_actions = payload["chunk_actions"]
@@ -61,11 +68,34 @@ def _behavior_env_worker(conn, cfg_dict, num_envs, task_idx):
                 raw_chunk_terminations = []
                 raw_chunk_truncations = []
                 infos_list = []
+                physx_crashed = False
                 for i in range(chunk_size):
+                    if physx_crashed:
+                        # After crash, repeat last obs with zero reward and terminated=True
+                        raw_obs_list.append(raw_obs_list[-1])
+                        chunk_rewards.append(to_tensor([0.0] * num_envs))
+                        raw_chunk_terminations.append(to_tensor([True] * num_envs))
+                        raw_chunk_truncations.append(to_tensor([True] * num_envs))
+                        infos_list.append([{"success": False, "episode_length": 0}] * num_envs)
+                        continue
                     actions = chunk_actions[:, i]
-                    raw_obs, step_rewards, terminations, truncations, infos = env.step(
-                        actions
-                    )
+                    try:
+                        raw_obs, step_rewards, terminations, truncations, infos = env.step(
+                            actions
+                        )
+                    except Exception as e:
+                        # PhysX crash (NaN quaternion, etc.) — mark as terminated
+                        import logging
+                        logging.getLogger("behavior_env").warning(
+                            f"PhysX crash caught at chunk step {i}: {e}"
+                        )
+                        physx_crashed = True
+                        raw_obs_list.append(raw_obs_list[-1] if raw_obs_list else raw_obs)
+                        chunk_rewards.append(to_tensor([0.0] * num_envs))
+                        raw_chunk_terminations.append(to_tensor([True] * num_envs))
+                        raw_chunk_truncations.append(to_tensor([True] * num_envs))
+                        infos_list.append([{"success": False, "episode_length": 0}] * num_envs)
+                        continue
                     raw_obs_list.append(raw_obs)
                     chunk_rewards.append(to_tensor(step_rewards))
                     raw_chunk_terminations.append(to_tensor(terminations))
