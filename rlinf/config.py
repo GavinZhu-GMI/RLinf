@@ -882,6 +882,10 @@ def validate_embodied_cfg(cfg):
                 _model_type = OmegaConf.select(cfg, "actor.model.model_type", default="")
                 _model_version = OmegaConf.select(cfg, "actor.model.model_version", default="")
                 if _model_type == "gr00t" and _model_version == "n1.6":
+                    # GR00T N1.6 outputs raw joint commands (not normalized [-1,1]).
+                    # Isaac-GR00T eval uses action_normalize=False.
+                    # With True, raw values >1 get amplified → physics divergence.
+                    omnigibson_cfg.robots[0].action_normalize = False
                     omnigibson_cfg.robots[0].proprio_obs = [
                         "joint_qpos", "joint_qpos_sin", "joint_qpos_cos",
                         "joint_qvel", "joint_qeffort",
