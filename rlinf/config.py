@@ -882,10 +882,65 @@ def validate_embodied_cfg(cfg):
                 _model_type = OmegaConf.select(cfg, "actor.model.model_type", default="")
                 _model_version = OmegaConf.select(cfg, "actor.model.model_version", default="")
                 if _model_type == "gr00t" and _model_version == "n1.6":
-                    # GR00T N1.6 outputs raw joint commands (not normalized [-1,1]).
-                    # Isaac-GR00T eval uses action_normalize=False.
-                    # With True, raw values >1 get amplified → physics divergence.
+                    # GR00T N1.6 outputs absolute joint positions (radians), not
+                    # normalized [-1,1]. Must match Isaac-GR00T eval's controller
+                    # config (og_teleop_cfg.py R1_CONTROLLER_CONFIG) which uses
+                    # command_input_limits=None for arms/trunk (no clipping/scaling).
+                    # Without this, r1pro_behavior.yaml's "default" limits clip raw
+                    # radian values to [-1,1] then scale them — completely wrong.
                     omnigibson_cfg.robots[0].action_normalize = False
+                    omnigibson_cfg.robots[0].controller_config = {
+                        "arm_left": {
+                            "name": "JointController",
+                            "motor_type": "position",
+                            "pos_kp": 150,
+                            "command_input_limits": None,
+                            "command_output_limits": None,
+                            "use_impedances": False,
+                            "use_delta_commands": False,
+                        },
+                        "arm_right": {
+                            "name": "JointController",
+                            "motor_type": "position",
+                            "pos_kp": 150,
+                            "command_input_limits": None,
+                            "command_output_limits": None,
+                            "use_impedances": False,
+                            "use_delta_commands": False,
+                        },
+                        "trunk": {
+                            "name": "JointController",
+                            "motor_type": "position",
+                            "pos_kp": 150,
+                            "command_input_limits": None,
+                            "command_output_limits": None,
+                            "use_impedances": False,
+                            "use_delta_commands": False,
+                        },
+                        "base": {
+                            "name": "HolonomicBaseJointController",
+                            "motor_type": "velocity",
+                            "vel_kp": 150,
+                            "command_input_limits": [[-1, -1, -1], [1, 1, 1]],
+                            "command_output_limits": [
+                                [-0.75, -0.75, -1.0],
+                                [0.75, 0.75, 1.0],
+                            ],
+                            "use_impedances": False,
+                        },
+                        "gripper_left": {
+                            "name": "MultiFingerGripperController",
+                            "mode": "smooth",
+                            "command_input_limits": "default",
+                            "command_output_limits": "default",
+                        },
+                        "gripper_right": {
+                            "name": "MultiFingerGripperController",
+                            "mode": "smooth",
+                            "command_input_limits": "default",
+                            "command_output_limits": "default",
+                        },
+                    }
                     omnigibson_cfg.robots[0].proprio_obs = [
                         "joint_qpos", "joint_qpos_sin", "joint_qpos_cos",
                         "joint_qvel", "joint_qeffort",
