@@ -61,7 +61,7 @@ prerelease-mode = "allow"
 [manifest]
 overrides = [
     { name = "datasets", specifier = "==3.6.0" },
-    { name = "peft", specifier = "==0.11.1" },
+    { name = "peft", specifier = ">=0.11.1" },
     { name = "setuptools", specifier = ">=69.5.1,<75.9" },
     { name = "tensorflow-addons", specifier = "==0.23.0" },
     { name = "torch", specifier = ">=2.6.0" },
@@ -3736,7 +3736,7 @@ wheels = [
 
 [[package]]
 name = "peft"
-version = "0.11.1"
+version = "0.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
@@ -3751,9 +3751,9 @@ dependencies = [
     { name = "transformers", version = "4.51.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-5-rlinf-agentic-sglang' or extra == 'extra-5-rlinf-agentic-vllm' or (extra == 'extra-5-rlinf-embodied' and extra == 'extra-5-rlinf-franka') or (extra == 'extra-5-rlinf-embodied' and extra == 'extra-5-rlinf-xsquare-turtle2') or (extra == 'extra-5-rlinf-franka' and extra == 'extra-5-rlinf-xsquare-turtle2')" },
     { name = "transformers", version = "4.57.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-5-rlinf-embodied' or (extra == 'extra-5-rlinf-agentic-sglang' and extra == 'extra-5-rlinf-agentic-vllm') or (extra == 'extra-5-rlinf-agentic-vllm' and extra == 'extra-5-rlinf-franka') or (extra == 'extra-5-rlinf-agentic-vllm' and extra == 'extra-5-rlinf-xsquare-turtle2') or (extra == 'extra-5-rlinf-franka' and extra == 'extra-5-rlinf-xsquare-turtle2') or (extra == 'extra-5-rlinf-agentic-sglang' and extra != 'extra-5-rlinf-embodied' and extra == 'extra-5-rlinf-franka') or (extra == 'extra-5-rlinf-agentic-sglang' and extra != 'extra-5-rlinf-embodied' and extra == 'extra-5-rlinf-xsquare-turtle2')" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/f8/8989b6e4bc4ef48e23f7f9077905873e18b577ead2760f7bab6bdae4473b/peft-0.11.1.tar.gz", hash = "sha256:c1a04462e589a1305a06f7c118be0b8602b829f9bfc2104b5c6514c7678c2310", size = 262612, upload-time = "2024-05-17T12:53:04.48Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/48/147b3ea999560b40a34fd78724c7777aa9d18409c2250bdcaf9c4f2db7fc/peft-0.18.1.tar.gz", hash = "sha256:2dd0d6bfce936d1850e48aaddbd250941c5c02fc8ef3237cd8fd5aac35e0bae2", size = 635030, upload-time = "2026-01-09T13:08:01.136Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/99/c5e0292a6d2a62e95c3dfe674ce9e8f8a9fe5d4835d3c9bb9b3e016f02ae/peft-0.11.1-py3-none-any.whl", hash = "sha256:76f2d2a4c9e0644e2741465663b8a02097775e9725d26d7b41551e6f1e72e7dd", size = 251583, upload-time = "2024-05-17T12:53:01.143Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/14/b4e3f574acf349ae6f61f9c000a77f97a3b315b4bb6ad03791e79ae4a568/peft-0.18.1-py3-none-any.whl", hash = "sha256:0bf06847a3551e3019fc58c440cffc9a6b73e6e2962c95b52e224f77bbdb50f1", size = 556960, upload-time = "2026-01-09T13:07:55.865Z" },
 ]
 
 [[package]]
@@ -5106,8 +5106,8 @@ requires-dist = [
     { name = "omegaconf", marker = "extra == 'agentic-vllm'", specifier = "==2.4.0.dev4" },
     { name = "opencv-python", marker = "extra == 'franka'" },
     { name = "opencv-python", marker = "extra == 'xsquare-turtle2'" },
-    { name = "peft", marker = "extra == 'agentic-sglang'", specifier = "==0.11.1" },
-    { name = "peft", marker = "extra == 'agentic-vllm'", specifier = "==0.11.1" },
+    { name = "peft", marker = "extra == 'agentic-sglang'", specifier = ">=0.11.1" },
+    { name = "peft", marker = "extra == 'agentic-vllm'", specifier = ">=0.11.1" },
     { name = "peft", marker = "extra == 'embodied'" },
     { name = "pip" },
     { name = "pre-commit" },
