@@ -17,5 +17,8 @@ video_cfg:
   video_base_dir: ${runner.logger.log_path}/video/train
 
 base_config_name: r1pro_behavior
+# Path to OmniGibson configs dir containing r1pro_behavior.yaml.
+# If null, auto-detected from omnigibson package location.
+omnigibson_config_dir: null
 
 task_idx: 0 # 0-49, for now, we only support single task training

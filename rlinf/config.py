@@ -862,14 +862,34 @@ def validate_embodied_cfg(cfg):
             SupportedEnvType(cfg.env.train.env_type) == SupportedEnvType.BEHAVIOR
             or SupportedEnvType(cfg.env.eval.env_type) == SupportedEnvType.BEHAVIOR
         ):
-            import omnigibson as og
-
             assert cfg.env.train.base_config_name == "r1pro_behavior", (
                 f"Only r1pro_behavior is supported for omnigibson, got {cfg.env.train.base_config_name}"
             )
+            # Resolve OmniGibson config directory:
+            #   1. Explicit path from env config (omnigibson_config_dir)
+            #   2. From omnigibson package (example_config_path or package path)
+            og_config_dir = OmegaConf.select(cfg, "env.train.omnigibson_config_dir", default=None)
+            if not og_config_dir:
+                try:
+                    import omnigibson as og
+                    og_config_dir = getattr(og, "example_config_path", None)
+                    if not og_config_dir:
+                        og_config_dir = os.path.join(og.__path__[0], "configs")
+                except Exception:
+                    import importlib.util
+                    _spec = importlib.util.find_spec("omnigibson")
+                    if _spec and _spec.submodule_search_locations:
+                        og_config_dir = os.path.join(
+                            _spec.submodule_search_locations[0], "configs"
+                        )
+                    else:
+                        raise ImportError(
+                            "Cannot find omnigibson configs. Set env.train.omnigibson_config_dir "
+                            "or install omnigibson."
+                        )
             # Load the pre-selected configuration and set the online_sampling flag
             config_filename = os.path.join(
-                og.example_config_path, "r1pro_behavior.yaml"
+                og_config_dir, f"{cfg.env.train.base_config_name}.yaml"
             )
             omnigibson_cfg = yaml.load(
                 open(config_filename, "r"), Loader=yaml.FullLoader
