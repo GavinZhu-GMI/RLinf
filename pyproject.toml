@@ -151,9 +151,9 @@ conflicts = [
     ],
 ]
 override-dependencies = [
-    "torch==2.6.0",
-    "torchvision==0.21.0",
-    "torchaudio==2.6.0",
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
+    "torchaudio>=2.6.0",
     "torchcodec==0.2",
     "xgrammar==0.1.19",
     "uvloop==0.21.0",
