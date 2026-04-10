@@ -88,6 +88,132 @@ def compute_evaluate_metrics(eval_metrics_list):
     return all_eval_metrics
 
 
+def _compute_reward_sparsity_metrics(data_buffer: dict) -> dict:
+    """Reward shape diagnostics for sparse-reward debugging.
+
+    Returns metrics that distinguish "reward truly sparse / terminal-only" from
+    "reward is dense but small". Use alongside critic/explained_variance to
+    decide whether the bottleneck is the reward signal or the critic.
+
+    Embodied PPO `data_buffer["rewards"]` has shape
+    `[n_chunk_step, batch, num_action_chunks]`. We flatten the time × chunk
+    axes into a single per-step axis `[T, batch]` for these statistics.
+    `loss_mask` (if present, same first dims as rewards) is honored so
+    post-done filler reward is not counted.
+    """
+    if "rewards" not in data_buffer:
+        return {}
+
+    device = Worker.torch_platform.current_device()
+    rewards = data_buffer["rewards"].to(device=device, dtype=torch.float32)
+
+    # Reshape rewards to [T, batch].
+    if rewards.ndim == 3:
+        n_chunk_step, batch_size, num_action_chunks = rewards.shape
+        rewards_flat = rewards.transpose(1, 2).reshape(-1, batch_size)
+    elif rewards.ndim == 2:
+        rewards_flat = rewards
+    else:
+        rewards_flat = rewards.reshape(rewards.shape[0], -1)
+    T, batch_size = rewards_flat.shape
+    if T == 0 or batch_size == 0:
+        return {}
+
+    # Build a [T, batch] mask. loss_mask may be [n_chunk_step, batch, k] with
+    # k in {1, num_action_chunks}; broadcast to num_action_chunks before reshape.
+    loss_mask = data_buffer.get("loss_mask", None)
+    if loss_mask is not None and rewards.ndim == 3:
+        lm = loss_mask.to(device=device).bool()
+        if lm.ndim == 3 and lm.shape[2] == 1 and num_action_chunks > 1:
+            lm = lm.expand(-1, -1, num_action_chunks)
+        if lm.shape == rewards.shape:
+            mask_flat = lm.transpose(1, 2).reshape(-1, batch_size)
+        else:
+            mask_flat = torch.ones_like(rewards_flat, dtype=torch.bool)
+    else:
+        mask_flat = torch.ones_like(rewards_flat, dtype=torch.bool)
+
+    eps = 1e-6
+    nonzero_mask = (rewards_flat.abs() > eps) & mask_flat
+    mask_float = mask_flat.float()
+
+    # Local reductions.
+    n_valid = mask_float.sum()
+    n_nonzero = nonzero_mask.float().sum()
+    sum_r = (rewards_flat * mask_float).sum()
+    sum_r_sq = ((rewards_flat * mask_float) ** 2).sum()
+    if mask_flat.any():
+        local_max = rewards_flat[mask_flat].max()
+    else:
+        local_max = torch.zeros((), device=device)
+
+    sum_pack = torch.stack([n_valid, n_nonzero, sum_r, sum_r_sq]).to(device)
+    torch.distributed.all_reduce(sum_pack, op=torch.distributed.ReduceOp.SUM)
+    n_valid_g, n_nonzero_g, sum_r_g, sum_r_sq_g = sum_pack.tolist()
+
+    max_pack = local_max.detach().clone().reshape(1).float()
+    torch.distributed.all_reduce(max_pack, op=torch.distributed.ReduceOp.MAX)
+    reward_max_g = max_pack.item()
+
+    if n_valid_g > 0:
+        nonzero_frac = n_nonzero_g / n_valid_g
+        mean_r = sum_r_g / n_valid_g
+        var_r = max(sum_r_sq_g / n_valid_g - mean_r * mean_r, 0.0)
+        reward_std = math.sqrt(var_r)
+    else:
+        nonzero_frac = 0.0
+        reward_std = 0.0
+
+    # First-nonzero-step fraction per trajectory: where in the episode does
+    # the first reward signal land? 0 = beginning, ~1 = terminal-only.
+    # If a trajectory has no reward, treat it as "terminal-only" (1.0).
+    any_nonzero_per_traj = nonzero_mask.any(dim=0)
+    first_idx = nonzero_mask.float().argmax(dim=0).float()
+    denom = float(max(T - 1, 1))
+    first_idx = torch.where(
+        any_nonzero_per_traj,
+        first_idx,
+        torch.full_like(first_idx, denom),
+    )
+    first_frac_local = first_idx / denom
+
+    first_pack = torch.stack(
+        [first_frac_local.sum(), torch.tensor(float(batch_size), device=device)]
+    )
+    torch.distributed.all_reduce(first_pack, op=torch.distributed.ReduceOp.SUM)
+    sum_first_g, n_traj_g = first_pack.tolist()
+    reward_first_nonzero_step_frac = (
+        sum_first_g / n_traj_g if n_traj_g > 0 else 1.0
+    )
+
+    # Coarse "where in the trajectory does reward land" histogram (5 buckets).
+    n_buckets = 5
+    bucket_size = max(T // n_buckets, 1)
+    truncated_T = bucket_size * n_buckets
+    rewards_truncated = rewards_flat[:truncated_T] * mask_float[:truncated_T]
+    bucket_sums_local = (
+        rewards_truncated.view(n_buckets, bucket_size, batch_size)
+        .sum(dim=(1, 2))
+        .float()
+    )
+    torch.distributed.all_reduce(bucket_sums_local, op=torch.distributed.ReduceOp.SUM)
+
+    n_traj_total = torch.tensor(float(batch_size), device=device)
+    torch.distributed.all_reduce(n_traj_total, op=torch.distributed.ReduceOp.SUM)
+    n_traj_total_v = n_traj_total.item()
+
+    metrics = {
+        "reward_nonzero_frac": float(nonzero_frac),
+        "reward_max": float(reward_max_g),
+        "reward_std": float(reward_std),
+        "reward_first_nonzero_step_frac": float(reward_first_nonzero_step_frac),
+    }
+    if n_traj_total_v > 0:
+        for i, v in enumerate(bucket_sums_local.tolist()):
+            metrics[f"reward_bucket_{i}"] = float(v / n_traj_total_v)
+    return metrics
+
+
 def compute_rollout_metrics(data_buffer: dict) -> dict:
     rollout_metrics = {}
 
@@ -99,6 +225,7 @@ def compute_rollout_metrics(data_buffer: dict) -> dict:
         rewards_metrics = {
             "rewards": mean_rewards.item(),
         }
+        rewards_metrics.update(_compute_reward_sparsity_metrics(data_buffer))
         rollout_metrics.update(rewards_metrics)
 
     if "advantages" in data_buffer:
