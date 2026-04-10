@@ -88,19 +88,26 @@ env:
   group_name: "EnvGroup"
 
   train:
-    # 4 envs across 4 GPUs (1 per GPU avoids B200 multi-scene hang)
-    # actor_split_num = lcm(4 actor, 4 env) // 4 = 1, so split works
-    total_num_envs: 4
-    # Short episodes for fast iteration. Follows the first ~500 frames
-    # (~16.7s) of the demo trajectory — covers the approach phase.
-    # Bump back up if/when shaping unlocks task completion and we need
-    # the policy to actually toggle the goal predicate.
-    max_episode_steps: 500
-    max_steps_per_rollout_epoch: 504  # must be divisible by num_action_chunks=8
+    # 8 envs across 4 GPUs (2 per GPU). The original config comment
+    # warned about a B200 "multi-scene hang" with >1 env per GPU; we are
+    # explicitly testing that here. If it hangs we revert to 4.
+    total_num_envs: 8
+    # ~2000 steps = ~67s of physics @ 30Hz. Long enough that a learned
+    # policy can actually complete turning_on_radio (~1000 env steps for
+    # a trained GR00T) without truncation, while ~2.25x faster than the
+    # canonical BEHAVIOR challenge horizon (4320 = 2x human demo mean).
+    # Iter 2-3 had 500 which was structurally unsolvable (radio is ~2m
+    # away at start, takes >16s of physics to approach + press).
+    max_episode_steps: 2000
+    # max_steps_per_rollout_epoch must be divisible by num_action_chunks=8
+    # (rlinf/config.py:822-828). 2000 itself is divisible (=250×8), but
+    # we add +8 of headroom above max_episode_steps so the rollout epoch
+    # doesn't truncate exactly at the episode boundary. 2008 = 251×8.
+    max_steps_per_rollout_epoch: 2008
   eval:
-    total_num_envs: 4
-    max_episode_steps: 500
-    max_steps_per_rollout_epoch: 504
+    total_num_envs: 8
+    max_episode_steps: 2000
+    max_steps_per_rollout_epoch: 2008
     video_cfg:
       save_video: True
       video_base_dir: ${runner.logger.log_path}/video/eval
@@ -119,7 +126,13 @@ actor:
   group_name: "ActorGroup"
   training_backend: "fsdp"
   micro_batch_size: 1
-  global_batch_size: 8  # 4 envs × 2 rollout_epochs = 8 trajectories
+  # PPO minibatch size for the optimizer step (NOT the buffer size).
+  # batch_size_per_rank = global_batch_size / world_size = 32 / 4 = 8
+  # chunks per GPU per gradient step. Iter 2 mistakenly shrank this
+  # 32 -> 8 thinking it tracked the buffer; it actually controls
+  # gradient noise per optimizer step. Restored to 32 (iter 1 value)
+  # for stable PPO updates.
+  global_batch_size: 32
   seed: 1234
   enable_offload: True
 
