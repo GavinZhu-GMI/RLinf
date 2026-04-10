@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import os
 from datetime import timedelta
 from typing import Optional
 
@@ -68,10 +69,16 @@ class MultiChannelProcessGroup:
         # Check if all workers have the same accelerator type
         accel_type = group_info.workers[0].accelerator_type
         accel_model = group_info.workers[0].accelerator_model
+        # Force CPU/Gloo when peers can't form a working accelerator collective.
+        # Set RLINF_DISABLE_ACCEL_CCL=1 to bypass NCCL for inter-container/inter-image
+        # groups where NCCL versions or CUDA toolkits don't match across peers
+        # (e.g. disaggregated train+rollout containers built on different bases).
+        force_no_accel_ccl = os.environ.get("RLINF_DISABLE_ACCEL_CCL", "0") == "1"
         self._no_accel_ccl = (
+            force_no_accel_ccl
             # Hetero accelerator models in the same group, disable CCL
             # NCCL for example does not support mixed GPU models
-            any(
+            or any(
                 worker.accelerator_model != accel_model for worker in group_info.workers
             )
             # CPU only, disable CCL
