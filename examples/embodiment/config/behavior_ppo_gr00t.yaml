@@ -99,15 +99,19 @@ env:
     # Iter 2-3 had 500 which was structurally unsolvable (radio is ~2m
     # away at start, takes >16s of physics to approach + press).
     max_episode_steps: 2000
-    # max_steps_per_rollout_epoch must be divisible by num_action_chunks=8
-    # (rlinf/config.py:822-828). 2000 itself is divisible (=250×8), but
-    # we add +8 of headroom above max_episode_steps so the rollout epoch
-    # doesn't truncate exactly at the episode boundary. 2008 = 251×8.
-    max_steps_per_rollout_epoch: 2008
+    # Two divisibility constraints on max_steps_per_rollout_epoch:
+    #   1. % num_action_chunks(=8) == 0  (rlinf/config.py:822-828)
+    #   2. rollout_size_per_rank % batch_size_per_rank == 0
+    #      (rlinf/workers/actor/fsdp_actor_worker.py:1338)
+    # For total_num_envs=8, rollout_epoch=2, world_size=4 actor ranks,
+    # batch_size_per_rank=8: rollout_size_per_rank = (8*2*N)/(8*4) = N/2
+    # so we need N/2 % 8 == 0, i.e. N % 16 == 0.
+    # 2016 = 126×16 is the smallest valid N >= max_episode_steps=2000.
+    max_steps_per_rollout_epoch: 2016
   eval:
     total_num_envs: 8
     max_episode_steps: 2000
-    max_steps_per_rollout_epoch: 2008
+    max_steps_per_rollout_epoch: 2016
     video_cfg:
       save_video: True
       video_base_dir: ${runner.logger.log_path}/video/eval
