@@ -151,13 +151,21 @@ actor:
 
   optim:
     lr: 2.0e-5                  # conservative — prevents gradient explosion
-    value_lr: 2.0e-5            # same as policy lr — value head trains stably
+    # Value head is randomly initialized (not warm-started from BC). With
+    # value_lr matched to policy_lr it falls behind the moving return
+    # distribution — observed in iter 1 as explained_variance=NaN and
+    # value_loss rising 0.075 -> 0.140 over 8 PPO steps. Bump to give
+    # the critic 5x faster updates.
+    value_lr: 1.0e-4
     adam_beta1: 0.9
     adam_beta2: 0.95            # more aggressive decay for noisy RL gradients
     adam_eps: 1.0e-08
     clip_grad: 1.0              # tight gradient clipping — critical for stability
     weight_decay: 0.01
-    critic_warmup_steps: 10     # warm up value head before using for advantage
+    # 10 was far too few for a randomly-init value head. With 300 steps of
+    # critic-only updates before policy gradients kick in, the critic gets
+    # to fit early returns before the actor moves the distribution.
+    critic_warmup_steps: 300
 
   fsdp_config:
     # FSDP2 handles mixed requires_grad + single-GPU (NO_SHARD) properly.
