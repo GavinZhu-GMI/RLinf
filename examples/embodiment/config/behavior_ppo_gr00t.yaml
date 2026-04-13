@@ -88,9 +88,12 @@ env:
   group_name: "EnvGroup"
 
   train:
-    # 8 envs across 4 GPUs (2 per GPU). The original config comment
-    # warned about a B200 "multi-scene hang" with >1 env per GPU; we are
-    # explicitly testing that here. If it hangs we revert to 4.
+    # 8 envs across 4 GPUs (2 vectorized per Isaac Sim via VectorEnvironment).
+    # Bug 1 (Eagle VLM shape mismatch input_embeds[243] vs vit_embeds[486])
+    # is handled by Isaac-GR00T's existing try/except in
+    # modeling_eagle3_vl.py:253 — silently truncates, non-fatal.
+    # Bug 2 (metric aggregation TypeError from list-not-tensor) is fixed
+    # in metric_utils.py:compute_evaluate_metrics.
     total_num_envs: 8
     # ~2000 steps = ~67s of physics @ 30Hz. Long enough that a learned
     # policy can actually complete turning_on_radio (~1000 env steps for

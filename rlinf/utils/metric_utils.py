@@ -78,9 +78,18 @@ def compute_evaluate_metrics(eval_metrics_list):
         ]
 
     for key in all_eval_metrics:
-        all_eval_metrics[key] = (
-            torch.concat(all_eval_metrics[key]).float().mean().numpy()
-        )
+        # Normalize to list[tensor] before concat. With vectorized envs
+        # (num_envs > 1 per worker), some values arrive as lists instead
+        # of tensors — convert them so torch.concat doesn't fail.
+        items = []
+        for v in all_eval_metrics[key]:
+            if isinstance(v, torch.Tensor):
+                items.append(v.float())
+            elif isinstance(v, (list, tuple)):
+                items.append(torch.tensor(v, dtype=torch.float32))
+            else:
+                items.append(torch.tensor([v], dtype=torch.float32))
+        all_eval_metrics[key] = torch.concat(items).mean().numpy()
 
     # Add total trajectory count to metrics
     all_eval_metrics["num_trajectories"] = sum(trajectory_counts)

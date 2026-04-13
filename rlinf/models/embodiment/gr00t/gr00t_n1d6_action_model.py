@@ -711,20 +711,24 @@ class GR00T_N1_6_ForRLActionPrediction(Gr00tN1d6, BasePolicy):
             "input_ids": inputs["input_ids"],
             "attention_mask": inputs["attention_mask"],
         }
-        # pixel_values: list of [C, H, W] tensors → [bsize, N_imgs, C, H, W]
+        # pixel_values: list of [C, H, W] tensors → [bsize, N_imgs_per_env, C, H, W]
+        # Split per-env instead of duplicating all images to every batch slot.
         if isinstance(inputs["pixel_values"], list):
-            pv = torch.stack(inputs["pixel_values"])  # [N_imgs, C, H, W]
-            forward_inputs["pixel_values"] = pv.unsqueeze(0).expand(
-                bsize, *pv.shape
+            pv = torch.stack(inputs["pixel_values"])
+            n_per_env = pv.shape[0] // bsize
+            forward_inputs["pixel_values"] = pv.reshape(
+                bsize, n_per_env, *pv.shape[1:]
             )
         else:
             forward_inputs["pixel_values"] = inputs["pixel_values"].reshape(
                 bsize, self.image_nums, *inputs["pixel_values"].shape[1:]
             )
-        # image_sizes: [N_imgs, 2] → [bsize, N_imgs, 2]
-        forward_inputs["image_sizes"] = inputs["image_sizes"].unsqueeze(0).expand(
-            bsize, *inputs["image_sizes"].shape
+        # image_sizes: [N_total_imgs, 2] → [bsize, N_imgs_per_env, 2]
+        n_images_per_env = inputs["image_sizes"].shape[0] // bsize
+        forward_inputs["image_sizes"] = inputs["image_sizes"].reshape(
+            bsize, n_images_per_env, *inputs["image_sizes"].shape[1:]
         )
+        
 
         result = {
             "prev_logprobs": rlinf_outputs["prev_logprobs"],
